@@ -5,7 +5,13 @@ using UnityEngine.XR.MagicLeap;
 
 public class VoiceIntents : MonoBehaviour
 {
-    private readonly MLPermissions.Callbacks permissionCallbacks = new MLPermissions.Callbacks();   
+    private readonly MLPermissions.Callbacks permissionCallbacks = new MLPermissions.Callbacks();
+
+// voice intents configuration instance (needs to be assigned in Inspector)
+    public MLVoiceIntentsConfiguration VoiceIntentsConfiguration;
+
+    // demo cube that can be activated and deactivated
+    public GameObject targetObject;
 
     // subscribe to permission events
     private void Awake()
@@ -13,6 +19,25 @@ public class VoiceIntents : MonoBehaviour
         permissionCallbacks.OnPermissionGranted += OnPermissionGranted;
         permissionCallbacks.OnPermissionDenied += OnPermissionDenied;
         permissionCallbacks.OnPermissionDeniedAndDontAskAgain += OnPermissionDenied;
+    }
+
+// handle voice events
+    private void MLVoiceOnOnVoiceEvent(in bool wasSuccessful, in MLVoice.IntentEvent voiceEvent)
+    {
+        if (wasSuccessful)
+        {
+            if (voiceEvent.EventID == 101)
+            {
+                Debug.Log("Activate target object");
+                targetObject.SetActive(true);
+            }
+
+            if (voiceEvent.EventID == 102)
+            {
+                Debug.Log("Activate target object");
+                targetObject.SetActive(false);
+            }
+        }
     }
 
     // unsubscribe from permission events
@@ -32,7 +57,8 @@ public class VoiceIntents : MonoBehaviour
     // on voice permission denied, disable script
     private void OnPermissionDenied(string permission)
     {
-        Debug.LogError($"Failed to initialize voice intents due to missing or denied {MLPermission.VoiceInput} permission. Please add to manifest. Disabling script.");
+        Debug.LogError(
+            $"Failed to initialize voice intents due to missing or denied {MLPermission.VoiceInput} permission. Please add to manifest. Disabling script.");
         enabled = false;
     }
 
@@ -49,18 +75,18 @@ public class VoiceIntents : MonoBehaviour
     {
         bool isVoiceEnabled = MLVoice.VoiceEnabled;
 
-        // if voice setting is enabled, try to set up voice intents
         if (isVoiceEnabled)
         {
             Debug.Log("Voice commands setting is enabled");
-        }
-
-        // if voice setting is disabled, open voice settings so user can enable it
-        else
-        {
-            Debug.Log("Voice commands setting is disabled - opening settings");
-            UnityEngine.XR.MagicLeap.SettingsIntentsLauncher.LaunchSystemVoiceInputSettings();
-            Application.Quit();
+            var result = MLVoice.SetupVoiceIntents(VoiceIntentsConfiguration);
+            if (result.IsOk)
+            {
+                MLVoice.OnVoiceEvent += MLVoiceOnOnVoiceEvent;
+            }
+            else
+            {
+                Debug.LogError("Voice could not initialize:" + result);
+            }
         }
     }
 }
