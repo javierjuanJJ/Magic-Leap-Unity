@@ -9,6 +9,15 @@ public class PlaneDetection : MonoBehaviour
     private ARPlaneManager planeManager;
     private readonly MLPermissions.Callbacks permissionCallbacks = new MLPermissions.Callbacks();
 
+    // wall placement objects
+    public GameObject targetIndicator;
+    public GameObject targetObject;
+    
+    // inputs
+    private MagicLeapInputs magicLeapInputs;
+    private MagicLeapInputs.ControllerActions controllerActions;
+    private bool isPlacing;
+
     private void Awake()
     {
         // subscribe to permission events
@@ -30,6 +39,10 @@ public class PlaneDetection : MonoBehaviour
     
     private void Start()
     {
+        // set wall objects as inactive
+        targetIndicator.SetActive(false);
+        targetObject.SetActive(false);
+        
         // make sure the plane manager is disabled at the start of the scene before permissions are granted
         planeManager = FindObjectOfType<ARPlaneManager>();
         if (planeManager == null)
@@ -44,6 +57,27 @@ public class PlaneDetection : MonoBehaviour
 
         // request spatial mapping permission for plane detection
         MLPermissions.RequestPermission(MLPermission.SpatialMapping, permissionCallbacks);
+        
+        magicLeapInputs = new MagicLeapInputs();
+        magicLeapInputs.Enable();
+        controllerActions = new MagicLeapInputs.ControllerActions(magicLeapInputs);
+        
+        controllerActions.Trigger.performed += Trigger_performed;
+        
+    }
+    
+    private void Trigger_performed(UnityEngine.InputSystem.InputAction.CallbackContext obj)
+    {
+        Debug.Log("Trigger pressed");
+ 
+        if (targetIndicator.activeSelf)
+        {
+            isPlacing = false;
+            targetObject.gameObject.SetActive(true);
+            targetIndicator.SetActive(false);
+            targetObject.transform.position = targetIndicator.transform.position;
+            targetObject.transform.rotation = targetIndicator.transform.rotation;
+        } 
     }
     
     // if permission denied, disable plane manager
@@ -60,6 +94,37 @@ public class PlaneDetection : MonoBehaviour
         {
             planeManager.enabled = true;
             Debug.Log("Plane manager is active");
+        }
+    }
+    
+    
+    private void Update()
+    {
+        if (planeManager.enabled)
+        {
+            PlanesSubsystem.Extensions.Query = new PlanesSubsystem.Extensions.PlanesQuery
+            {
+                BoundsCenter = Camera.main.transform.position,
+                BoundsRotation = Camera.main.transform.rotation,
+                BoundsExtents = Vector3.one * 20f,
+                Flags = planeManager.requestedDetectionMode.ToMLQueryFlags() | PlanesSubsystem.Extensions.MLPlanesQueryFlags.Polygons | PlanesSubsystem.Extensions.MLPlanesQueryFlags.Semantic_Wall,
+                MaxResults = 100,
+                MinPlaneArea = 0.25f
+            };
+            
+        }
+        
+        
+        // raycast from the controller outward
+        Ray raycastRay = new Ray(controllerActions.Position.ReadValue<Vector3>(), controllerActions.Rotation.ReadValue<Quaternion>() * Vector3.forward);
+
+        // if ray hits an object on the Planes layer, position the indicator at the hit point and set it as active
+        if (Physics.Raycast(raycastRay, out RaycastHit hitInfo, 100, LayerMask.GetMask("Planes")))
+        {
+            Debug.Log(hitInfo.transform);
+            targetIndicator.transform.position = hitInfo.point;
+            targetIndicator.transform.rotation = Quaternion.LookRotation(-hitInfo.normal);
+            targetIndicator.gameObject.SetActive(true);
         }
     }
     
